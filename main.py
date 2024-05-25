@@ -5,38 +5,28 @@ class AirportScheduling:
         self.flights = flights
         self.gates = gates
         self.problem = Problem()
-        self.solutions = {}
+        self.solutions = []
 
     def create_variables(self):
         for flight in self.flights:
             self.problem.addVariable(flight["id"], [gate["id"] for gate in self.gates])
-            self.problem.addVariable(flight["id"] + "_hour", range(24))
-            self.problem.addVariable(flight["id"] + "_minute", range(60))
+            '''self.problem.addVariable(flight["id"] + "_hour", range(8, 18))  # Reduce the range of hours
+            self.problem.addVariable(flight["id"] + "_minute", range(0, 60, 30))  # Reduce the range of minutes'''
 
     def add_constraints(self):
-        # Ensure that each flight is assigned a unique gate
+        # No two planes can be on the same gate at the same time
         self.problem.addConstraint(AllDifferentConstraint(), [flight["id"] for flight in self.flights])
 
-        # Ensure that the aircraft size matches the gate size
-        for flight in self.flights:
-            for gate in self.gates:
-                if flight["aircraft_size"] == gate["size"]:
-                    self.problem.addConstraint(lambda g: g == gate["id"], (flight["id"],))
+        # Priority for certain flights
+        priority_flights = ["FR1", "BE1", "CA1"]
+        priority_gates = ["A2", "B39", "C14"]
+        for i, flight in enumerate(priority_flights):
+            self.problem.addConstraint(lambda gate, g=priority_gates[i]: gate == g, (flight,))
 
-        # Ensure that international flights are assigned to gates with Customs and Immigration
+        # Ensure flights are assigned to gates in the correct position
+        gate_positions = {gate["id"]: gate["position"] for gate in self.gates}
         for flight in self.flights:
-            if flight["country"] != "USA":
-                for gate in self.gates:
-                    if gate["customs_immigration"]:
-                        self.problem.addConstraint(lambda g: g == gate["id"], (flight["id"],))
-
-        # Ensure that a flight is not assigned to a gate until the previous flight has departed
-        for i in range(len(self.flights)):
-            for j in range(i + 1, len(self.flights)):
-                if self.flights[i]["id"] != self.flights[j]["id"]:
-                    self.problem.addConstraint(lambda h1, m1, h2, m2: h2 * 60 + m2 - (h1 * 60 + m1) >= 60,
-                                               (self.flights[i]["id"] + "_hour", self.flights[i]["id"] + "_minute",
-                                                self.flights[j]["id"] + "_hour", self.flights[j]["id"] + "_minute"))
+            self.problem.addConstraint(lambda gate_id, fp=flight["position"]: gate_positions[gate_id] == fp, (flight["id"],))
 
     def solve(self):
         self.create_variables()
@@ -45,46 +35,34 @@ class AirportScheduling:
 
     def print_solution(self):
         if self.solutions:
-            print(len(self.solutions))
-            for solution in self.solutions:
-                for flight in self.flights:
-                    gate = solution.get(flight["id"])
-                    hour = solution.get(flight["id"] + "_hour")
-                    minute = solution.get(flight["id"] + "_minute")
-                    print(f"Flight {flight['id']} assigned to Gate {gate} at {hour:02d}:{minute:02d}")
+            print(f"Number of solutions: {len(self.solutions)}")
         else:
             print("No solution found")
 
 # Example usage
 flights = [
-    {"id": "FR1", "country": "France", "arrival": "10:00", "departure": "11:00", "aircraft_size": "large"},
-    {"id": "BE1", "country": "Belgium", "arrival": "10:30", "departure": "11:30", "aircraft_size": "medium"},
-    {"id": "CA1", "country": "Canada", "arrival": "11:00", "departure": "12:00", "aircraft_size": "small"},
-    {"id": "US1", "country": "USA", "arrival": "11:30", "departure": "12:30", "aircraft_size": "large"},
-    {"id": "DE1", "country": "Germany", "arrival": "12:00", "departure": "13:00", "aircraft_size": "medium"},
-    {"id": "IT1", "country": "Italy", "arrival": "12:30", "departure": "13:30", "aircraft_size": "small"},
-    {"id": "ES1", "country": "Spain", "arrival": "13:00", "departure": "14:00", "aircraft_size": "large"},
-    {"id": "CH1", "country": "China", "arrival": "13:30", "departure": "14:30", "aircraft_size": "medium"},
-    {"id": "JP1", "country": "Japan", "arrival": "14:00", "departure": "15:00", "aircraft_size": "small"},
-    {"id": "UK1", "country": "United Kingdom", "arrival": "14:30", "departure": "15:30", "aircraft_size": "large"},
-    {"id": "AU1", "country": "Australia", "arrival": "15:00", "departure": "16:00", "aircraft_size": "medium"},
+    {"id": "FR1", "country": "France", "arrival": "10:00", "departure": "11:00", "position": "west"},
+    {"id": "BE1", "country": "Belgium", "arrival": "10:30", "departure": "11:30", "position": "east"},
+    {"id": "CA1", "country": "Canada", "arrival": "11:00", "departure": "12:00", "position": "north"},
+    {"id": "US1", "country": "USA", "arrival": "11:30", "departure": "12:30", "position": "north"},
+    {"id": "DE1", "country": "Germany", "arrival": "12:00", "departure": "13:00", "position": "east"},
+    {"id": "IT1", "country": "Italy", "arrival": "12:30", "departure": "13:30", "position": "south"},
+    {"id": "ES1", "country": "Spain", "arrival": "13:00", "departure": "14:00", "position": "west"},
 ]
 
 gates = [
-    {"id": "A2", "size": "large", "customs_immigration": True},
-    {"id": "B39", "size": "large", "customs_immigration": True},
-    {"id": "C14", "size": "medium", "customs_immigration": False},
-    {"id": "D21", "size": "medium", "customs_immigration": False},
-    {"id": "E25", "size": "small", "customs_immigration": False},
-    {"id": "F31", "size": "small", "customs_immigration": False},
-    {"id": "G37", "size": "large", "customs_immigration": True},
-    {"id": "A21", "size": "medium", "customs_immigration": False},
-    {"id": "D25", "size": "medium", "customs_immigration": False},
-    {"id": "C31", "size": "small", "customs_immigration": False},
-    {"id": "B37", "size": "small", "customs_immigration": False},
-    {"id": "H41", "size": "large", "customs_immigration": True},
-    {"id": "I43", "size": "medium", "customs_immigration": False},
-    {"id": "J45", "size": "small", "customs_immigration": False},
+    {"id": "A1", "position": "west"},
+    {"id": "A2", "position": "west"},
+    {"id": "B2", "position": "north"},
+    {"id": "B39", "position": "east"},
+    {"id": "C14", "position": "north"},
+    {"id": "D21", "position": "east"},
+    {"id": "E5", "position": "south"},
+    {"id": "E7", "position": "west"},
+    {"id": "F11", "position": "north"},
+    {"id": "F13", "position": "south"},
+    {"id": "G4", "position": "west"},
+    {"id": "G6", "position": "south"},
 ]
 
 scheduler = AirportScheduling(flights, gates)
